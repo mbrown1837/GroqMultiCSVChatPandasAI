@@ -1,7 +1,7 @@
-langchain
-langchain_community
+langchain==0.2.12
+langchain_community==0.2.11
+langchain_core==0.2.27
+langchain-groq==0.1.7
+streamlit==1.37.1
 pandasai
-streamlit
-groq
-langchain-groq
 python-dotenv

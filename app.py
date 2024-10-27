@@ -10,7 +10,6 @@ st.set_page_config(
     page_title="AI CSV Assistant",
     page_icon="🤖",
     layout="wide",
-    theme="dark"
 )
 
 # Custom CSS for chat interface

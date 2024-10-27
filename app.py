@@ -4,19 +4,46 @@ from pandasai import SmartDataframe
 from langchain_groq import ChatGroq
 from dotenv import load_dotenv
 import os
-import warnings
-warnings.filterwarnings('ignore')
 
 # Set page configuration
 st.set_page_config(
     page_title="AI CSV Assistant",
     page_icon="🤖",
     layout="wide",
-    initial_sidebar_state="expanded"
+    theme="dark"
 )
 
+# Custom CSS for chat interface
+st.markdown("""
+    <style>
+    .chat-container {
+        background-color: #1E1E1E;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 10px 0;
+    }
+    .user-message {
+        background-color: #2E7BF6;
+        color: white;
+        padding: 10px;
+        border-radius: 10px;
+        margin: 5px 0;
+    }
+    .assistant-message {
+        background-color: #383838;
+        padding: 10px;
+        border-radius: 10px;
+        margin: 5px 0;
+    }
+    .stButton > button {
+        background-color: #2E7BF6;
+        color: white;
+        border-radius: 20px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 def get_api_key():
-    """Get API key and display source"""
     load_dotenv()
     api_key = os.environ.get('GROQ_API_KEY')
     
@@ -32,75 +59,47 @@ def get_api_key():
         st.error("GROQ API key not found!")
         st.stop()
 
-def safe_chat_with_csv(df, query):
-    """Enhanced safe chat function with error handling"""
+def chat_with_csv(df, query):
     try:
         llm = ChatGroq(
             groq_api_key=get_api_key(), 
-            model_name="llama3-70b-8192",
+            model_name="llama-3.1-70b-versatile",
             temperature=0.7
         )
         
-        # Configure PandasAI with enhanced settings
         pandas_ai = SmartDataframe(
-            df, 
+            df.copy(),
             config={
                 "llm": llm,
                 "enable_cache": True,
                 "custom_plot": True,
-                "save_charts": False,
-                "verbose": True,
-                "enforce_privacy": True,
-                "max_rows": 500000,
-                "max_columns": 100
+                "verbose": True
             }
         )
         
-        # Enhanced prompt handling
-        if "summary" in query.lower():
-            return pandas_ai.chat(f"Provide a detailed summary of this dataset including number of rows, columns, and key information")
-        elif "analyze" in query.lower():
-            return pandas_ai.chat(f"Analyze the data and provide insights about {query}")
-        elif "plot" in query.lower() or "graph" in query.lower():
-            return pandas_ai.chat(f"Create a visualization for {query}")
-        else:
-            return pandas_ai.chat(query)
+        response = pandas_ai.chat(query)
+        return response
 
     except Exception as e:
         return f"Error: {str(e)}"
 
-def safe_edit_csv(df, edit_query):
-    """Enhanced safe edit function with validation"""
+def edit_csv(df, edit_query):
     try:
         llm = ChatGroq(
             groq_api_key=get_api_key(), 
-            model_name="llama3-70b-8192",
+            model_name="llama-3.1-70b-versatile",
             temperature=0.2
         )
         
-        pandas_ai = SmartDataframe(
-            df, 
-            config={
-                "llm": llm,
-                "enable_cache": True,
-                "max_rows": 500000
-            }
-        )
-        
-        # Process edit query
+        pandas_ai = SmartDataframe(df.copy(), config={"llm": llm})
         result = pandas_ai.chat(f"Edit the dataframe: {edit_query}")
         
-        # Validate result
         if isinstance(result, pd.DataFrame):
-            if len(result) > 0:
-                return result, "Changes applied successfully!"
-            else:
-                return df, "Edit resulted in empty DataFrame. Original data retained."
-        else:
-            return df, f"Edit could not be applied: {str(result)}"
+            return result, "Changes applied successfully!"
+        return df, str(result)
             
     except Exception as e:
-        return df, f"Error editing data: {str(e)}"
+        return df, f"Error: {str(e)}"
 
 # Initialize session state
 if 'chat_history' not in st.session_state:
@@ -110,99 +109,89 @@ if 'current_df' not in st.session_state:
 
 # Sidebar
 with st.sidebar:
-    st.title("CSV File Upload")
+    st.title("📁 File Upload")
     uploaded_file = st.file_uploader("Upload CSV file", type=['csv'])
     
     if uploaded_file:
         try:
             st.session_state.current_df = pd.read_csv(uploaded_file)
-            st.success(f"Loaded: {uploaded_file.name}")
-            
-            # Display DataFrame info
+            st.success(f"✅ {uploaded_file.name} loaded")
             st.write("### Data Info")
-            st.info(f"Rows: {st.session_state.current_df.shape[0]}")
-            st.info(f"Columns: {st.session_state.current_df.shape[1]}")
-            
-            # Display column info
-            st.write("### Columns")
-            for col in st.session_state.current_df.columns:
-                st.write(f"- {col}")
-                
+            st.info(f"📊 Rows: {st.session_state.current_df.shape[0]}")
+            st.info(f"📊 Columns: {st.session_state.current_df.shape[1]}")
         except Exception as e:
             st.error(f"Error loading file: {str(e)}")
             st.session_state.current_df = None
 
 # Main content
-st.title("CSV Chat Assistant")
+st.title("💬 CSV Chat Assistant")
 
 if st.session_state.current_df is not None:
-    try:
-        # Safe data preview with error handling
-        st.subheader("Data Preview")
-        preview_df = st.session_state.current_df.head(3).copy()
-        st.dataframe(preview_df)
+    # Data preview
+    with st.expander("Preview Data"):
+        st.dataframe(st.session_state.current_df.head(3), use_container_width=True)
+    
+    # Tabs for chat and edit
+    tab1, tab2 = st.tabs(["💭 Chat", "✏️ Edit"])
+    
+    with tab1:
+        query = st.text_input("Ask anything about your data:", 
+                            placeholder="Example: Give me a summary of this dataset")
         
-        # Chat and Edit tabs
-        tab1, tab2 = st.tabs(["Chat", "Edit"])
+        col1, col2 = st.columns([6,1])
+        with col2:
+            send_button = st.button("Send 📤")
         
-        with tab1:
-            # Chat interface
-            query = st.text_input("Chat with your data:", 
-                                placeholder="Ask me anything about your data")
-            
-            if st.button("Send"):
-                if query:
-                    # Add user message to chat
-                    st.session_state.chat_history.append(("user", query))
+        if send_button and query:
+            st.session_state.chat_history.append(("user", query))
+            with st.spinner("Thinking..."):
+                response = chat_with_csv(st.session_state.current_df, query)
+                st.session_state.chat_history.append(("assistant", response))
+        
+        # Display chat history
+        for role, message in st.session_state.chat_history:
+            if role == "user":
+                st.markdown(f'<div class="user-message">👤 {message}</div>', 
+                          unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="assistant-message">🤖 {message}</div>', 
+                          unsafe_allow_html=True)
+    
+    with tab2:
+        edit_query = st.text_input("Enter edit instructions:", 
+                                 placeholder="Example: Remove duplicate rows")
+        
+        col1, col2 = st.columns([6,1])
+        with col2:
+            edit_button = st.button("Edit ✏️")
+        
+        if edit_button and edit_query:
+            with st.spinner("Applying changes..."):
+                edited_df, message = edit_csv(st.session_state.current_df, edit_query)
+                if isinstance(edited_df, pd.DataFrame):
+                    st.session_state.current_df = edited_df
+                    st.success(message)
+                    st.dataframe(edited_df)
                     
-                    # Get AI response with loading indicator
-                    with st.spinner("Processing..."):
-                        response = safe_chat_with_csv(st.session_state.current_df, query)
-                        st.session_state.chat_history.append(("assistant", response))
-            
-            # Display chat history
-            for role, message in st.session_state.chat_history:
-                if role == "user":
-                    st.write("You:", message)
+                    st.download_button(
+                        "📥 Download Edited CSV",
+                        edited_df.to_csv(index=False),
+                        "edited_data.csv",
+                        "text/csv"
+                    )
                 else:
-                    st.write("Assistant:", message)
-                st.write("---")
-        
-        with tab2:
-            # Edit interface
-            edit_query = st.text_input("Enter edit instructions:", 
-                                     placeholder="Example: Remove duplicates")
-            
-            if st.button("Apply Edit"):
-                if edit_query:
-                    with st.spinner("Applying changes..."):
-                        edited_df, message = safe_edit_csv(st.session_state.current_df, 
-                                                         edit_query)
-                        
-                        if edited_df is not None:
-                            st.session_state.current_df = edited_df
-                            st.success(message)
-                            st.dataframe(edited_df)
-                            
-                            # Download button
-                            st.download_button(
-                                "Download Edited CSV",
-                                edited_df.to_csv(index=False),
-                                "edited_data.csv",
-                                "text/csv"
-                            )
+                    st.error(message)
 
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-        
 else:
-    st.info("Please upload a CSV file to begin")
+    st.info("👈 Please upload a CSV file to begin")
 
-# Helper text
-st.sidebar.markdown("""
-### Tips:
-- Try asking about data summary
-- Request specific analysis
-- Ask for trends or patterns
-- Edit data with clear instructions
-""")
+# Footer
+st.markdown("---")
+st.markdown(
+    """
+    <div style='text-align: center'>
+        Built with Streamlit, PandasAI, and Groq LLM
+    </div>
+    """, 
+    unsafe_allow_html=True
+)

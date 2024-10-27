@@ -128,7 +128,7 @@ st.title("💬 CSV Chat Assistant")
 if st.session_state.current_df is not None:
     # Data preview
     with st.expander("Preview Data"):
-        st.dataframe(st.session_state.current_df.head(3), use_container_width=True)
+        st.dataframe(st.session_state.current_df.head(10), use_container_width=True)
     
     # Tabs for chat and edit
     tab1, tab2 = st.tabs(["💭 Chat", "✏️ Edit"])

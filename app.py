@@ -37,7 +37,7 @@ def safe_chat_with_csv(df, query):
     try:
         llm = ChatGroq(
             groq_api_key=get_api_key(), 
-            model_name="llama3-groq-70b-8192-tool-use-preview",
+            model_name="llama3-70b-8192",
             temperature=0.7
         )
         

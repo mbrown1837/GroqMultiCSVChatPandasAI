@@ -21,6 +21,8 @@ st.markdown("""
     }
     .stButton > button {
         border-radius: 20px;
+        background-color: #2e7bf6;
+        color: white;
     }
     .chat-message {
         padding: 15px;
@@ -37,16 +39,24 @@ st.markdown("""
         background-color: #f0f2f6;
         margin-right: 20%;
     }
-    .send-button {
-        margin-top: 0 !important;
-    }
     </style>
 """, unsafe_allow_html=True)
 
 def get_api_key():
     load_dotenv()
     api_key = os.environ.get('GROQ_API_KEY')
-    return api_key if api_key else st.secrets["groq_api_key"]
+    
+    if api_key:
+        st.sidebar.success("✅ Using API key from .env file")
+        return api_key
+    
+    try:
+        api_key = st.secrets["groq_api_key"]
+        st.sidebar.success("✅ Using API key from Streamlit secrets")
+        return api_key
+    except:
+        st.error("❌ GROQ API key not found!")
+        st.stop()
 
 def process_csv_query(df, query, is_edit=False):
     try:
@@ -55,15 +65,6 @@ def process_csv_query(df, query, is_edit=False):
             model_name="llama3-70b-8192",
             temperature=0.2
         )
-        
-        # Enhanced prompt for better summary and analysis
-        if "summary" in query.lower():
-            enhanced_query = f"""Provide a comprehensive summary of this dataset including:
-            1. What kind of data it contains
-            2. Key patterns or trends
-            3. Important insights
-            Original query: {query}"""
-            query = enhanced_query
         
         pandas_ai = SmartDataframe(
             df, 
@@ -88,8 +89,6 @@ def initialize_session_state():
         st.session_state.chat_history = []
     if 'current_df' not in st.session_state:
         st.session_state.current_df = None
-    if 'last_query' not in st.session_state:
-        st.session_state.last_query = None
 
 def display_chat_message(message, is_user=True):
     message_type = "user-message" if is_user else "ai-message"
@@ -113,7 +112,7 @@ with st.sidebar:
         st.success(f"📊 {uploaded_file.name} loaded successfully!")
         
         # Quick stats
-        st.write("### Quick Stats")
+        st.write("### Data Info")
         st.info(f"📏 Rows: {st.session_state.current_df.shape[0]}")
         st.info(f"📊 Columns: {st.session_state.current_df.shape[1]}")
 
@@ -121,41 +120,36 @@ with st.sidebar:
 st.title("🤖 AI CSV Assistant")
 
 if st.session_state.current_df is not None:
-    # Data preview with toggle
-    if st.checkbox("Show Data Preview", value=True):
-        st.write("### Data Preview")
-        st.dataframe(st.session_state.current_df.head(3), use_container_width=True)
+    # Compact data preview
+    st.write("### Data Preview")
+    st.dataframe(st.session_state.current_df.head(3), use_container_width=True, height=150)
     
     # Tabs for different functionalities
-    tab1, tab2, tab3 = st.tabs(["💬 Chat", "✏️ Edit", "📊 Quick Analysis"])
+    tab1, tab2 = st.tabs(["💬 Chat", "✏️ Edit"])
     
     with tab1:
-        # Chat interface with automatic sending
+        # Chat interface
         query = st.text_input("Ask anything about your data:", 
                             key="chat_input",
-                            placeholder="Example: Give me a summary of this dataset",
-                            on_change=lambda: setattr(st.session_state, 'last_query', st.session_state.chat_input))
+                            placeholder="Example: Give me a summary of this dataset")
         
-        # Process query when Enter is pressed
-        if query and query != st.session_state.last_query:
+        if st.button("Send", key="send_chat"):
             st.session_state.chat_history.append(("user", query))
             with st.spinner("🤔 Thinking..."):
                 response = process_csv_query(st.session_state.current_df, query)
                 st.session_state.chat_history.append(("ai", response))
-            st.session_state.last_query = query
         
         # Display chat history
         for role, message in st.session_state.chat_history:
             display_chat_message(message, is_user=(role == "user"))
     
     with tab2:
-        # Edit interface with automatic sending
+        # Edit interface
         edit_query = st.text_input("Enter edit instructions:", 
                                 key="edit_input",
-                                placeholder="Example: Remove duplicate rows",
-                                on_change=lambda: setattr(st.session_state, 'last_edit_query', st.session_state.edit_input))
+                                placeholder="Example: Remove duplicate rows")
         
-        if edit_query and edit_query != getattr(st.session_state, 'last_edit_query', None):
+        if st.button("Edit", key="send_edit"):
             with st.spinner("✏️ Applying changes..."):
                 edited_df, message = process_csv_query(st.session_state.current_df, 
                                                     edit_query, 
@@ -170,30 +164,17 @@ if st.session_state.current_df is not None:
                     file_name="edited_data.csv",
                     mime="text/csv"
                 )
-    
-    with tab3:
-        st.write("### Quick Analysis Tools")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("📊 Generate Summary Statistics"):
-                st.write(st.session_state.current_df.describe())
-        
-        with col2:
-            if st.button("🔍 Check Data Quality"):
-                missing_values = st.session_state.current_df.isnull().sum()
-                st.write("Missing Values per Column:", missing_values)
 
 else:
     st.info("👈 Please upload a CSV file to begin")
 
-# Footer with helpful tips
+# Footer
 st.markdown("---")
-st.markdown("""
+st.markdown(
+    """
     <div style='text-align: center'>
-        💡 Tips:
-        • Press Enter to send messages
-        • Use clear, specific questions
-        • Try asking for trends and patterns
+        Made with ❤️ using Streamlit, PandasAI, and Groq LLM
     </div>
-""", unsafe_allow_html=True)
+    """, 
+    unsafe_allow_html=True
+)
